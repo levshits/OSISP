@@ -50,6 +50,16 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
+		switch (msg.message)
+		{
+		case WM_MOUSEMOVE:
+		{
+			MessageBox(NULL, (LPCWSTR)"Win Computer", (LPCWSTR)"Ok", MB_OK);
+		}
+		default:
+			break;
+		}
+	
 	}
 
 	return (int) msg.wParam;
