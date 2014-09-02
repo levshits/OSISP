@@ -3,6 +3,10 @@
 
 #include "stdafx.h"
 #include "OSISP1.h"
+#include <windows.h>
+#include <stdlib.h>
+#include <string.h>
+#include <tchar.h>
 
 #define MAX_LOADSTRING 100
 
@@ -18,6 +22,8 @@ LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 HWND hWnd;
 HDC hdc;
+
+
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPTSTR    lpCmdLine,
@@ -44,9 +50,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_OSISP1));
 
 	// Main message loop:
-	bool isActionActivated = false;
-	int xPosition;
-	int yPosition;
+	
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
@@ -54,35 +58,7 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-		switch (msg.message)
-		{
-		case WM_MOUSEMOVE:
-		{
-			//do nothing
-							 if (isActionActivated)
-							 {
-								 MoveToEx(hdc, xPosition, yPosition, NULL);
-								 xPosition = LOWORD(msg.lParam);
-								 yPosition = HIWORD(msg.lParam);
-								 LineTo(hdc, xPosition, yPosition);
-							 }
-							 break;
-		}
-		case WM_LBUTTONDOWN:
-		{
-							   isActionActivated = true;
-							   xPosition = LOWORD(msg.lParam);
-							   yPosition = HIWORD(msg.lParam);
-							   break;
-		}
-		case WM_LBUTTONUP:
-		{
-							 isActionActivated = false;
-							 break;
-		}
-		default:
-			break;
-		}
+		
 	
 	}
 
@@ -161,10 +137,36 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;
-	HDC hdc;
-
+	HDC hdc = GetDC(hWnd);
+	static bool isActionActivated = false;
+	static int xPosition = 0;
+	static int yPosition = 0;
 	switch (message)
 	{
+		case WM_MOUSEMOVE:
+		{
+			//do nothing
+			if (isActionActivated)
+			{
+				MoveToEx(hdc, xPosition, yPosition, NULL);
+				xPosition = LOWORD(lParam);
+				yPosition = HIWORD(lParam);
+				LineTo(hdc, xPosition, yPosition);
+			}
+			break;
+		}
+		case WM_LBUTTONDOWN:
+		{
+			isActionActivated = true;
+			xPosition = LOWORD(lParam);
+			yPosition = HIWORD(lParam);
+			break;
+		}
+		case WM_LBUTTONUP:
+		{
+			isActionActivated = false;
+			break;
+		}
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
