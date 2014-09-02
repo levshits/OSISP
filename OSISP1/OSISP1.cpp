@@ -16,7 +16,8 @@ ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
-
+HWND hWnd;
+HDC hdc;
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPTSTR    lpCmdLine,
@@ -43,6 +44,9 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 	hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_OSISP1));
 
 	// Main message loop:
+	bool isActionActivated = false;
+	int xPosition;
+	int yPosition;
 	while (GetMessage(&msg, NULL, 0, 0))
 	{
 		if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
@@ -54,7 +58,27 @@ int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
 		{
 		case WM_MOUSEMOVE:
 		{
-			MessageBox(NULL, (LPCWSTR)"Win Computer", (LPCWSTR)"Ok", MB_OK);
+			//do nothing
+							 if (isActionActivated)
+							 {
+								 MoveToEx(hdc, xPosition, yPosition, NULL);
+								 xPosition = LOWORD(msg.lParam);
+								 yPosition = HIWORD(msg.lParam);
+								 LineTo(hdc, xPosition, yPosition);
+							 }
+							 break;
+		}
+		case WM_LBUTTONDOWN:
+		{
+							   isActionActivated = true;
+							   xPosition = LOWORD(msg.lParam);
+							   yPosition = HIWORD(msg.lParam);
+							   break;
+		}
+		case WM_LBUTTONUP:
+		{
+							 isActionActivated = false;
+							 break;
 		}
 		default:
 			break;
@@ -111,7 +135,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-
+   hdc = GetDC(hWnd);
    if (!hWnd)
    {
       return FALSE;
