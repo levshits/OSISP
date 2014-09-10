@@ -21,8 +21,10 @@ BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK	About(HWND, UINT, WPARAM, LPARAM);
 HWND hWnd;
-HDC hdc;
-
+HDC hScreenDC = NULL, hMemoryDC = NULL;
+HBITMAP hPicture = NULL;
+DWORD *data = NULL; // указатель на область пам€ти, где будет лежать картинка
+int width, height;
 
 int APIENTRY _tWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -93,6 +95,81 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	return RegisterClassEx(&wcex);
 }
 
+
+bool InitializeGraphics(HWND hw)
+{
+	// проверка окна
+	if (!IsWindow(hw))
+		return false;
+
+	// если процедура вызвана дл€ –≈-инициализации, освободим существующие объекты
+	if (hPicture)
+		DeleteObject(hPicture);
+	if (hMemoryDC)
+		DeleteDC(hMemoryDC);
+	if (hScreenDC)
+		ReleaseDC(hw, hScreenDC);
+
+	// найдем размеры "окна" дл€ рисовани€
+	RECT rect;
+	GetClientRect(hw, &rect);
+
+	width = rect.right - rect.left;
+	height = rect.bottom - rect.top;
+
+	// захват контекста устройства окна (клиентской области)
+	hScreenDC = GetDC(hw);
+	if (hScreenDC == NULL)
+		return false;
+
+	// создание совместимого контекста устройства в пам€ти - будущий буфер
+	hMemoryDC = CreateCompatibleDC(hScreenDC);
+	if (hMemoryDC == NULL)
+	{
+		ReleaseDC(hw, hScreenDC);
+		return false;
+	}
+
+	// создание BITMAP дл€ рисовани€ 
+	LPBITMAPINFO lpbi;
+	lpbi = (LPBITMAPINFO) new BYTE[sizeof(BITMAPINFOHEADER)+(3 * sizeof(RGBQUAD))];
+	BITMAPINFO &MSbi = *lpbi;
+	ZeroMemory(&MSbi, sizeof(BITMAPINFO));
+
+	// параметры хранени€ картинки в пам€ти
+	MSbi.bmiHeader.biBitCount = 32; // 32 бит на точку - одна точка - одно 32-битное слово
+	MSbi.bmiHeader.biClrImportant = 0;
+	MSbi.bmiHeader.biClrUsed = 0;
+	MSbi.bmiHeader.biCompression = BI_RGB; // без компрессии
+	MSbi.bmiHeader.biHeight = -height;  // знак "-" нужен чтобы битмап не был "перевернут" - 
+	// при "+" первыми в буфере идут последние строчки битмапа
+	MSbi.bmiHeader.biPlanes = 1;// количество цветовых плоскостей, дл€ RGB всегда 1
+	MSbi.bmiHeader.biSize = sizeof(BITMAPINFO);
+	MSbi.bmiHeader.biSizeImage = 0;
+	MSbi.bmiHeader.biWidth = width;
+	MSbi.bmiHeader.biXPelsPerMeter = 0;
+	MSbi.bmiHeader.biYPelsPerMeter = 0;
+
+	// создаем устройство-независимую битмап-секцию (Device-Independent Bitmap, DIB)
+	hPicture = CreateDIBSection(hMemoryDC, &MSbi, DIB_RGB_COLORS, (void**)&(data), NULL, NULL);
+	if (hPicture == NULL)
+	{
+		DWORD k = GetLastError();
+		ReleaseDC(hw, hScreenDC);
+		DeleteDC(hMemoryDC);
+		return false;
+	}
+
+	// выбираем созданную секцию на memoryDC - т.е. дл€ буфера
+	SelectObject(hMemoryDC, hPicture);
+	static HBRUSH Brush = CreateSolidBrush(RGB(255,255,255));
+	FillRect(hMemoryDC, &rect, Brush);
+
+	delete lpbi;
+	lpbi = NULL;
+
+	return true;
+}
 //
 //   FUNCTION: InitInstance(HINSTANCE, int)
 //
@@ -111,12 +188,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
    hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-   hdc = GetDC(hWnd);
    if (!hWnd)
    {
       return FALSE;
    }
-
+   InitializeGraphics(hWnd);
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
 
@@ -137,7 +213,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	int wmId, wmEvent;
 	PAINTSTRUCT ps;
-	HDC hdc = GetDC(hWnd);
+	static HPEN Pen = CreatePen(PS_SOLID, 2, RGB(0,0,0));
+	SelectObject(hScreenDC, Pen);
+	SelectObject(hMemoryDC, Pen);
 	static bool isActionActivated = false;
 	static int xPosition = 0;
 	static int yPosition = 0;
@@ -148,10 +226,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			//do nothing
 			if (isActionActivated)
 			{
-				MoveToEx(hdc, xPosition, yPosition, NULL);
+				MoveToEx(hMemoryDC, xPosition, yPosition, NULL);
 				xPosition = LOWORD(lParam);
 				yPosition = HIWORD(lParam);
-				LineTo(hdc, xPosition, yPosition);
+				LineTo(hMemoryDC, xPosition, yPosition);
+				InvalidateRect(hWnd, NULL, false);
 			}
 			break;
 		}
@@ -167,6 +246,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			isActionActivated = false;
 			break;
 		}
+		case WM_SIZE:   // перемещении/изменении размеров окна
+			if (InitializeGraphics(hWnd)) // (пере)инициализируем графику
+			{
+				// и выбираем белый карандаш на оба контекста устройства
+				SelectObject(hScreenDC, Pen);
+				SelectObject(hMemoryDC, Pen);
+			}
+			if (message != WM_CREATE)   // если окно уже было создано
+				InvalidateRect(hWnd, NULL, false); // перерисуем
+			break;
 	case WM_COMMAND:
 		wmId    = LOWORD(wParam);
 		wmEvent = HIWORD(wParam);
@@ -184,8 +273,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_PAINT:
-		hdc = BeginPaint(hWnd, &ps);
-		// TODO: Add any drawing code here...
+		hScreenDC = BeginPaint(hWnd, &ps);
+		BitBlt(hScreenDC, 0, 0, width, height, hMemoryDC, 0, 0, SRCCOPY);
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
